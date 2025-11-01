@@ -18,7 +18,7 @@
 go.work
 
 # Built binary
-fenv-fvm
+/fenv-fvm
 fenv-fvm-*
 
 # Test version file
