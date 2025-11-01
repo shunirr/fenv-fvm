@@ -17,9 +17,17 @@ fenv-fvm is an [fenv](https://github.com/fenv-org/fenv)-compatible Flutter versi
 
 ## Installation
 
-### Download from GitHub Releases
+### Homebrew (macOS/Linux)
 
-Download the binary for your platform from the latest release:
+The easiest way to install fenv-fvm is via Homebrew:
+
+```bash
+brew install shunirr/fenv-fvm/fenv-fvm
+```
+
+### Manual Installation from GitHub Releases
+
+Alternatively, download the binary for your platform from the latest release:
 
 ```bash
 # Example: macOS arm64
@@ -30,9 +38,8 @@ sudo mv fenv-fvm /usr/local/bin/
 ```
 
 Available binaries:
-
 - `fenv-fvm-linux-amd64.tar.gz`
-- `fenv-fvm-linux-aarch64.tar.gz`
+- `fenv-fvm-linux-arm64.tar.gz`
 - `fenv-fvm-darwin-amd64.tar.gz` (Intel Mac)
 - `fenv-fvm-darwin-arm64.tar.gz` (Apple Silicon)
 
