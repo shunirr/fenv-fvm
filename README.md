@@ -1,71 +1,72 @@
 # fenv-fvm
 
-fenv-fvmは、[fenv](https://github.com/fenv-org/fenv)互換のFlutterバージョン管理ツールです。バックエンドに[FVM (Flutter Version Management)](https://fvm.app/)を使用し、CI環境でfenvと同じワークフローを実現します。
+fenv-fvm is an [fenv](https://github.com/fenv-org/fenv)-compatible Flutter version management tool. It uses [FVM (Flutter Version Management)](https://fvm.app/) as the backend and enables the same workflow as fenv in CI environments.
 
-## 特徴
+## Features
 
-- **単一バイナリ**: DartやFlutterのランタイム不要
-- **fenv互換**: `.flutter-version`ファイルでバージョン管理
-- **FVMバックエンド**: FVMの強力なSDK管理機能を活用
-- **CI/CD最適**: Codemagicなどfvm対応CI環境で即座に使用可能
-- **マルチプラットフォーム**: Linux (x86_64/aarch64) および macOS (x86_64/arm64) 対応
+- **Single Binary**: No Dart or Flutter runtime required
+- **fenv-compatible**: Version management via `.flutter-version` files
+- **FVM Backend**: Leverages FVM's powerful SDK management capabilities
+- **CI/CD Optimized**: Works immediately in fvm-ready CI environments like Codemagic
+- **Multi-platform**: Supports Linux (x86_64/aarch64) and macOS (x86_64/arm64)
 
-## 必要要件
+## Requirements
 
-- `fvm`がPATHに存在すること
-- ネットワーク接続（Flutter SDKダウンロード用）
+- `fvm` must be available in PATH
+- Network connection (for downloading Flutter SDK)
 
-## インストール
+## Installation
 
-### GitHubリリースからダウンロード
+### Download from GitHub Releases
 
-最新リリースから、お使いのプラットフォームに対応したバイナリをダウンロードしてください：
+Download the binary for your platform from the latest release:
 
 ```bash
-# 例: macOS arm64の場合
-curl -L -o fenv-fvm.tar.gz https://github.com/YOUR_USERNAME/fenv-fvm/releases/latest/download/fenv-fvm-darwin-arm64.tar.gz
+# Example: macOS arm64
+curl -L -o fenv-fvm.tar.gz https://github.com/shunirr/fenv-fvm/releases/latest/download/fenv-fvm-darwin-arm64.tar.gz
 tar -xzf fenv-fvm.tar.gz
 chmod +x fenv-fvm
 sudo mv fenv-fvm /usr/local/bin/
 ```
 
-利用可能なバイナリ：
+Available binaries:
+
 - `fenv-fvm-linux-amd64.tar.gz`
 - `fenv-fvm-linux-aarch64.tar.gz`
 - `fenv-fvm-darwin-amd64.tar.gz` (Intel Mac)
 - `fenv-fvm-darwin-arm64.tar.gz` (Apple Silicon)
 
-## セットアップ
+## Setup
 
-### 1. Shimの初期化
+### 1. Initialize Shims
 
-fenv-fvmのshimをセットアップし、PATHに追加します：
+Set up fenv-fvm shims and add them to your PATH:
 
 ```bash
 eval "$(fenv-fvm init)"
 ```
 
-シェルの設定ファイル（`~/.bashrc`, `~/.zshrc`など）に追加することで、永続的に有効化できます：
+To make this permanent, add it to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```bash
 echo 'eval "$(fenv-fvm init)"' >> ~/.zshrc
 ```
 
-### 2. プロジェクトでFlutterバージョンを指定
+### 2. Specify Flutter Version in Your Project
 
-プロジェクトルートに`.flutter-version`ファイルを作成します：
+Create a `.flutter-version` file in your project root:
 
 ```bash
-# 方法1: fenv-fvm localコマンドで作成
+# Method 1: Using fenv-fvm local command
 fenv-fvm local 3.13.9
 
-# 方法2: 手動で作成
+# Method 2: Create manually
 echo "3.13.9" > .flutter-version
 ```
 
-### 3. Flutterコマンドをそのまま使用
+### 3. Use Flutter Commands as Normal
 
-以降、通常の`flutter`や`dart`コマンドが自動的に正しいバージョンで実行されます：
+From now on, normal `flutter` and `dart` commands will automatically run with the correct version:
 
 ```bash
 flutter --version
@@ -74,11 +75,11 @@ flutter build apk
 dart --version
 ```
 
-## コマンドリファレンス
+## Command Reference
 
 ### `fenv-fvm init`
 
-shimディレクトリをセットアップし、PATH設定用のシェルスクリプトを出力します。
+Sets up the shim directory and outputs a shell script for PATH configuration.
 
 ```bash
 eval "$(fenv-fvm init)"
@@ -86,18 +87,18 @@ eval "$(fenv-fvm init)"
 
 ### `fenv-fvm local [version]`
 
-#### バージョン指定あり
+#### With version argument
 
-現在のディレクトリに`.flutter-version`ファイルを作成し、指定したFlutterバージョンをインストールします。
+Creates a `.flutter-version` file in the current directory and installs the specified Flutter version.
 
 ```bash
 fenv-fvm local 3.13.9
 fenv-fvm local stable
 ```
 
-#### バージョン指定なし
+#### Without version argument
 
-既存の`.flutter-version`ファイルを読み取り、FVMでSDKを同期します（主にCI用）。
+Reads the existing `.flutter-version` file and synchronizes the SDK via FVM (primarily for CI).
 
 ```bash
 fenv-fvm local
@@ -105,7 +106,7 @@ fenv-fvm local
 
 ### `fenv-fvm install <version>`
 
-指定したFlutterバージョンを事前にダウンロードします。`.flutter-version`ファイルは変更しません。
+Pre-downloads the specified Flutter version. Does not modify the `.flutter-version` file.
 
 ```bash
 fenv-fvm install 3.13.9
@@ -113,19 +114,19 @@ fenv-fvm install 3.13.9
 
 ### `fenv-fvm version`
 
-現在のプロジェクトで設定されているFlutterバージョンを表示します。
+Displays the Flutter version configured for the current project.
 
 ```bash
 fenv-fvm version
-# 出力例: 3.13.9 (set by /path/to/project/.flutter-version)
+# Output: 3.13.9 (set by /path/to/project/.flutter-version)
 ```
 
-## CI/CD環境での使用
+## Usage in CI/CD Environments
 
-### 典型的なCI設定例
+### Typical CI Configuration Example
 
 ```yaml
-# .github/workflows/build.yml の例
+# Example: .github/workflows/build.yml
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -158,7 +159,7 @@ jobs:
 
 ### Codemagic
 
-Codemagicではfvmがプリインストールされているため、さらにシンプルです：
+Even simpler on Codemagic since fvm comes pre-installed:
 
 ```yaml
 workflows:
@@ -181,44 +182,44 @@ workflows:
           flutter build apk
 ```
 
-## 仕組み
+## How It Works
 
-fenv-fvmは以下のように動作します：
+fenv-fvm operates as follows:
 
-1. `.flutter-version`ファイルからFlutterバージョンを読み取る
-2. `fvm install <version>`と`fvm use <version>`を実行してSDKを準備
-3. `<project>/.fvm/flutter_sdk/bin/flutter`（または`dart`）へのパスを解決
-4. 現在のプロセスを解決されたバイナリで置き換え（`syscall.Exec`）
+1. Reads the Flutter version from the `.flutter-version` file
+2. Runs `fvm install <version>` and `fvm use <version>` to prepare the SDK
+3. Resolves the path to `<project>/.fvm/flutter_sdk/bin/flutter` (or `dart`)
+4. Replaces the current process with the resolved binary (`syscall.Exec`)
 
-これにより、通常の`flutter`/`dart`コマンドが透過的に適切なバージョンで実行されます。
+This allows normal `flutter`/`dart` commands to transparently execute with the appropriate version.
 
-## トラブルシューティング
+## Troubleshooting
 
 ### `fvm not found in PATH`
 
-fvmがインストールされていないか、PATHに含まれていません：
+fvm is not installed or not in your PATH:
 
 ```bash
-# fvmのインストール
+# Install fvm
 dart pub global activate fvm
 
-# PATHに追加
+# Add to PATH
 export PATH="$PATH:$HOME/.pub-cache/bin"
 ```
 
 ### `.flutter-version not found`
 
-プロジェクトルートに`.flutter-version`ファイルが存在しません：
+The `.flutter-version` file doesn't exist in the project root:
 
 ```bash
 fenv-fvm local 3.13.9
 ```
 
-## ライセンス
+## License
 
 MIT License
 
-## 関連プロジェクト
+## Related Projects
 
-- [fenv](https://github.com/fenv-org/fenv) - オリジナルのfenv
+- [fenv](https://github.com/fenv-org/fenv) - Original fenv
 - [FVM](https://fvm.app/) - Flutter Version Management

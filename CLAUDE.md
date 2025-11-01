@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Language Policy
+
+**All project content must be written in English**, including:
+- Documentation (README.md, SPEC.md, comments, etc.)
+- Code comments
+- Git commit messages
+- Variable and function names
+- Error messages
+
+This ensures consistency and accessibility for the global development community.
+
 ## Project Overview
 
 fenv-fvm is a single-binary CLI tool written in Go that provides FENV-compatible functionality for Flutter version management using FVM as the backend. The project enables CI environments (like Codemagic) to build repositories that use fenv locally without requiring Dart/Flutter runtimes.
