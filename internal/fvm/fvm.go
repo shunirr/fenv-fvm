@@ -17,12 +17,12 @@ func CheckFvmAvailable() error {
 	return nil
 }
 
-// removeShimsFromPath removes the fenv-fvm shims directory from PATH
+// getEnvWithoutShims returns environment variables with shims removed from PATH
 // to prevent infinite loops when fvm calls flutter/dart
-func removeShimsFromPath() string {
+func getEnvWithoutShims() []string {
 	currentPath := os.Getenv("PATH")
 	if currentPath == "" {
-		return ""
+		return os.Environ()
 	}
 
 	// Get shim root (default: ~/.fenv-fvm)
@@ -30,7 +30,7 @@ func removeShimsFromPath() string {
 	if shimRoot == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return currentPath // If we can't get home, return original PATH
+			return os.Environ() // If we can't get home, return original environment
 		}
 		shimRoot = filepath.Join(home, ".fenv-fvm")
 	}
@@ -46,7 +46,20 @@ func removeShimsFromPath() string {
 		}
 	}
 
-	return strings.Join(filteredDirs, string(os.PathListSeparator))
+	newPath := strings.Join(filteredDirs, string(os.PathListSeparator))
+
+	// Build new environment with modified PATH
+	var newEnv []string
+	for _, env := range os.Environ() {
+		// Skip existing PATH variable
+		if !strings.HasPrefix(env, "PATH=") {
+			newEnv = append(newEnv, env)
+		}
+	}
+	// Add new PATH
+	newEnv = append(newEnv, "PATH="+newPath)
+
+	return newEnv
 }
 
 // Install runs fvm install <version>
@@ -57,7 +70,7 @@ func Install(version string) error {
 
 	// Remove shims from PATH to prevent infinite loop
 	// when fvm tries to execute flutter/dart commands
-	cmd.Env = append(os.Environ(), "PATH="+removeShimsFromPath())
+	cmd.Env = getEnvWithoutShims()
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fenv-fvm: failed to install Flutter '%s' via fvm", version)
@@ -75,7 +88,7 @@ func Use(version, projectRoot string) error {
 
 	// Remove shims from PATH to prevent infinite loop
 	// when fvm tries to execute flutter/dart commands
-	cmd.Env = append(os.Environ(), "PATH="+removeShimsFromPath())
+	cmd.Env = getEnvWithoutShims()
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fenv-fvm: failed to prepare Flutter '%s' via fvm", version)
