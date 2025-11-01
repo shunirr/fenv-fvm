@@ -25,23 +25,27 @@ func getEnvWithoutShims() []string {
 		return os.Environ()
 	}
 
-	// Get shim root (default: ~/.fenv-fvm)
-	shimRoot := os.Getenv("FENV_FVM_ROOT")
-	if shimRoot == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return os.Environ() // If we can't get home, return original environment
-		}
-		shimRoot = filepath.Join(home, ".fenv-fvm")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return os.Environ() // If we can't get home, return original environment
 	}
-	shimsDir := filepath.Join(shimRoot, "shims")
 
-	// Split PATH and filter out shims directory
+	// Get fenv-fvm shim root (default: ~/.fenv-fvm)
+	fenvFvmShimRoot := os.Getenv("FENV_FVM_ROOT")
+	if fenvFvmShimRoot == "" {
+		fenvFvmShimRoot = filepath.Join(home, ".fenv-fvm")
+	}
+	fenvFvmShimsDir := filepath.Join(fenvFvmShimRoot, "shims")
+
+	// Also filter out ~/.fenv/shims to prevent conflicts with original fenv tool
+	fenvShimsDir := filepath.Join(home, ".fenv", "shims")
+
+	// Split PATH and filter out both shim directories
 	pathDirs := strings.Split(currentPath, string(os.PathListSeparator))
 	var filteredDirs []string
 	for _, dir := range pathDirs {
-		// Skip the shims directory
-		if dir != shimsDir {
+		// Skip both shim directories
+		if dir != fenvFvmShimsDir && dir != fenvShimsDir {
 			filteredDirs = append(filteredDirs, dir)
 		}
 	}
@@ -64,13 +68,16 @@ func getEnvWithoutShims() []string {
 
 // Install runs fvm install <version>
 func Install(version string) error {
+	env := getEnvWithoutShims()
+
 	cmd := exec.Command("fvm", "install", version)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 
 	// Remove shims from PATH to prevent infinite loop
 	// when fvm tries to execute flutter/dart commands
-	cmd.Env = getEnvWithoutShims()
+	cmd.Env = env
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fenv-fvm: failed to install Flutter '%s' via fvm", version)
@@ -81,14 +88,17 @@ func Install(version string) error {
 
 // Use runs fvm use <version> in the project root directory
 func Use(version, projectRoot string) error {
-	cmd := exec.Command("fvm", "use", version)
+	env := getEnvWithoutShims()
+
+	cmd := exec.Command("fvm", "use", version, "--force")
 	cmd.Dir = projectRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 
 	// Remove shims from PATH to prevent infinite loop
 	// when fvm tries to execute flutter/dart commands
-	cmd.Env = getEnvWithoutShims()
+	cmd.Env = env
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fenv-fvm: failed to prepare Flutter '%s' via fvm", version)

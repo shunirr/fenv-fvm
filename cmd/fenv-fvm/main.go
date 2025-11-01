@@ -66,33 +66,17 @@ func runShimMode(binaryName string) {
 		os.Exit(1)
 	}
 
-	// 2. Read requested version
-	ver, _, err := version.ReadVersion(projectRoot)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	// 3. Check fvm availability
-	if err := fvm.CheckFvmAvailable(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	// 4. Synchronize with fvm
-	if err := fvm.Prepare(ver, projectRoot); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	// 5. Resolve executable
+	// 2. Resolve executable (without running fvm install/use)
+	// The SDK should already be installed via "fenv-fvm local"
 	binaryPath, err := fvm.ResolveBinary(projectRoot, binaryName)
 	if err != nil {
+		// If binary is missing, inform the user to run fenv-fvm local
 		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintf(os.Stderr, "fenv-fvm: run 'fenv-fvm local' to install the Flutter SDK\n")
 		os.Exit(1)
 	}
 
-	// 6. Exec - replace current process with the resolved binary
+	// 3. Exec - replace current process with the resolved binary
 	// Prepare arguments (binary name + original args, excluding argv[0])
 	args := append([]string{binaryName}, os.Args[1:]...)
 	env := os.Environ()
