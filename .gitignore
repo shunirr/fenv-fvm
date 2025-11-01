@@ -45,3 +45,6 @@ fenv-fvm-*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# FVM Version Cache
+.fvm/
