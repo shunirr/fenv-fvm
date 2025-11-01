@@ -1,79 +1,24 @@
-name: Release
-
+name: release
 on:
   push:
     tags:
-      - 'v*'
-
-permissions:
-  contents: write
-
+      - "v*"
 jobs:
-  build:
-    name: Build and Release
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          # Linux builds
-          - goos: linux
-            goarch: amd64
-            platform: linux-amd64
-          - goos: linux
-            goarch: arm64
-            platform: linux-aarch64
-          # macOS builds
-          - goos: darwin
-            goarch: amd64
-            platform: darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            platform: darwin-arm64
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          go build -o fenv-fvm ./cmd/fenv-fvm
-          chmod +x fenv-fvm
-
-      - name: Create archive
-        run: |
-          tar -czf fenv-fvm-${{ matrix.platform }}.tar.gz fenv-fvm
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fenv-fvm-${{ matrix.platform }}
-          path: fenv-fvm-${{ matrix.platform }}.tar.gz
-
   release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          path: ./artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
         with:
-          files: ./artifacts/*/*.tar.gz
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
