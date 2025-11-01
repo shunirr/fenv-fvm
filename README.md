@@ -104,12 +104,22 @@ Reads the existing `.flutter-version` file and synchronizes the SDK via FVM (pri
 fenv-fvm local
 ```
 
-### `fenv-fvm install <version>`
+### `fenv-fvm install [version]`
 
 Pre-downloads the specified Flutter version. Does not modify the `.flutter-version` file.
 
+#### With version argument
+
 ```bash
 fenv-fvm install 3.13.9
+```
+
+#### Without version argument
+
+Reads the version from `.flutter-version` in the current project and installs it.
+
+```bash
+fenv-fvm install
 ```
 
 ### `fenv-fvm version`

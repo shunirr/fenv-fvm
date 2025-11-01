@@ -190,20 +190,41 @@ func handleLocal(args []string) {
 	}
 }
 
-// handleInstall implements "fenv-fvm install <version>"
+// handleInstall implements "fenv-fvm install [version]"
 func handleInstall(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "fenv-fvm: install requires a version argument\n")
-		os.Exit(1)
-	}
-
 	// Check if fvm is available
 	if err := fvm.CheckFvmAvailable(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	versionToInstall := args[0]
+	var versionToInstall string
+
+	if len(args) > 0 {
+		// Version specified as argument
+		versionToInstall = args[0]
+	} else {
+		// No argument: read from .flutter-version in current directory
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fenv-fvm: failed to get current directory\n")
+			os.Exit(1)
+		}
+
+		projectRoot, err := version.FindProjectRoot(cwd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+
+		ver, _, err := version.ReadVersion(projectRoot)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+
+		versionToInstall = ver
+	}
 
 	// Run fvm install only (no fvm use)
 	if err := fvm.Install(versionToInstall); err != nil {
@@ -239,10 +260,10 @@ func handleVersion() {
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: fenv-fvm <command> [args]\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  init               Setup shims and PATH\n")
-	fmt.Fprintf(os.Stderr, "  local [version]    Set or sync Flutter version\n")
-	fmt.Fprintf(os.Stderr, "  install <version>  Pre-download Flutter version\n")
-	fmt.Fprintf(os.Stderr, "  version            Show current Flutter version\n")
+	fmt.Fprintf(os.Stderr, "  init                Setup shims and PATH\n")
+	fmt.Fprintf(os.Stderr, "  local [version]     Set or sync Flutter version\n")
+	fmt.Fprintf(os.Stderr, "  install [version]   Pre-download Flutter version\n")
+	fmt.Fprintf(os.Stderr, "  version             Show current Flutter version\n")
 }
 
 // determineProgramMode returns the execution mode based on program name
