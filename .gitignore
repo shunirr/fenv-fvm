@@ -21,6 +21,9 @@ go.work
 fenv-fvm
 fenv-fvm-*
 
+# Test version file
+.flutter-version
+
 # IDE files
 .vscode/
 .idea/

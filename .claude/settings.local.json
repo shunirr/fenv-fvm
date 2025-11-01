@@ -7,7 +7,10 @@
       "Bash(mv:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(./fenv-fvm init:*)",
+      "Bash(.flutter-version)",
+      "Bash(./fenv-fvm version:*)"
     ],
     "deny": []
   }

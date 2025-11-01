@@ -1,0 +1,79 @@
+package fvm
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+)
+
+// CheckFvmAvailable checks if fvm is available in PATH
+func CheckFvmAvailable() error {
+	_, err := exec.LookPath("fvm")
+	if err != nil {
+		return fmt.Errorf("fenv-fvm: fvm not found in PATH")
+	}
+	return nil
+}
+
+// Install runs fvm install <version>
+func Install(version string) error {
+	cmd := exec.Command("fvm", "install", version)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("fenv-fvm: failed to install Flutter '%s' via fvm", version)
+	}
+
+	return nil
+}
+
+// Use runs fvm use <version> in the project root directory
+func Use(version, projectRoot string) error {
+	cmd := exec.Command("fvm", "use", version)
+	cmd.Dir = projectRoot
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("fenv-fvm: failed to prepare Flutter '%s' via fvm", version)
+	}
+
+	return nil
+}
+
+// Prepare runs both Install and Use for the given version
+func Prepare(version, projectRoot string) error {
+	if err := Install(version); err != nil {
+		return err
+	}
+
+	if err := Use(version, projectRoot); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ResolveBinary resolves the path to flutter or dart binary
+// binaryName should be "flutter" or "dart"
+func ResolveBinary(projectRoot, binaryName string) (string, error) {
+	binaryPath := filepath.Join(projectRoot, ".fvm", "flutter_sdk", "bin", binaryName)
+
+	// Check if binary exists
+	if _, err := os.Stat(binaryPath); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("fenv-fvm: resolved Flutter SDK is incomplete (missing bin/%s)", binaryName)
+		}
+		return "", err
+	}
+
+	// Return absolute path
+	absPath, err := filepath.Abs(binaryPath)
+	if err != nil {
+		return "", err
+	}
+
+	return absPath, nil
+}
