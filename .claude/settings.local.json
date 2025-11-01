@@ -5,7 +5,9 @@
       "Bash(./fenv-fvm)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(go test:*)"
     ],
     "deny": []
   }

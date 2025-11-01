@@ -31,6 +31,9 @@ fenv-fvm-*
 # mise version manager
 .mise.lock
 
+# Claude Code settings
+.claude/
+
 # OS generated files
 .DS_Store
 .DS_Store?

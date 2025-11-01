@@ -57,8 +57,14 @@ go version
 # Build the binary
 go build -o fenv-fvm ./cmd/fenv-fvm
 
-# Run tests (when implemented)
+# Run tests
 go test ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run tests with coverage
+go test -cover ./...
 
 # Format code
 go fmt ./...
