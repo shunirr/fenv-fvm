@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // CheckFvmAvailable checks if fvm is available in PATH
@@ -16,11 +17,47 @@ func CheckFvmAvailable() error {
 	return nil
 }
 
+// removeShimsFromPath removes the fenv-fvm shims directory from PATH
+// to prevent infinite loops when fvm calls flutter/dart
+func removeShimsFromPath() string {
+	currentPath := os.Getenv("PATH")
+	if currentPath == "" {
+		return ""
+	}
+
+	// Get shim root (default: ~/.fenv-fvm)
+	shimRoot := os.Getenv("FENV_FVM_ROOT")
+	if shimRoot == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return currentPath // If we can't get home, return original PATH
+		}
+		shimRoot = filepath.Join(home, ".fenv-fvm")
+	}
+	shimsDir := filepath.Join(shimRoot, "shims")
+
+	// Split PATH and filter out shims directory
+	pathDirs := strings.Split(currentPath, string(os.PathListSeparator))
+	var filteredDirs []string
+	for _, dir := range pathDirs {
+		// Skip the shims directory
+		if dir != shimsDir {
+			filteredDirs = append(filteredDirs, dir)
+		}
+	}
+
+	return strings.Join(filteredDirs, string(os.PathListSeparator))
+}
+
 // Install runs fvm install <version>
 func Install(version string) error {
 	cmd := exec.Command("fvm", "install", version)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	// Remove shims from PATH to prevent infinite loop
+	// when fvm tries to execute flutter/dart commands
+	cmd.Env = append(os.Environ(), "PATH="+removeShimsFromPath())
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fenv-fvm: failed to install Flutter '%s' via fvm", version)
@@ -35,6 +72,10 @@ func Use(version, projectRoot string) error {
 	cmd.Dir = projectRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	// Remove shims from PATH to prevent infinite loop
+	// when fvm tries to execute flutter/dart commands
+	cmd.Env = append(os.Environ(), "PATH="+removeShimsFromPath())
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("fenv-fvm: failed to prepare Flutter '%s' via fvm", version)
