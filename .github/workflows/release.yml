@@ -45,14 +45,18 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -o fenv-fvm-${{ matrix.platform }} ./cmd/fenv-fvm
-          chmod +x fenv-fvm-${{ matrix.platform }}
+          go build -o fenv-fvm ./cmd/fenv-fvm
+          chmod +x fenv-fvm
+
+      - name: Create archive
+        run: |
+          tar -czf fenv-fvm-${{ matrix.platform }}.tar.gz fenv-fvm
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: fenv-fvm-${{ matrix.platform }}
-          path: fenv-fvm-${{ matrix.platform }}
+          path: fenv-fvm-${{ matrix.platform }}.tar.gz
 
   release:
     name: Create Release
@@ -67,7 +71,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./artifacts/*/fenv-fvm-*
+          files: ./artifacts/*/*.tar.gz
           draft: false
           prerelease: false
           generate_release_notes: true
