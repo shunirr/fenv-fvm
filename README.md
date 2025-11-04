@@ -169,10 +169,13 @@ Even simpler on Codemagic since FVM comes pre-installed:
 workflows:
   build:
     environment:
-      flutter: stable
+      flutter: fvm  # Use FVM to manage Flutter versions
     scripts:
-      - name: Install Flutter SDK
-        script: fvm install 3.13.9
+      - name: Install Flutter SDK for fenv-fvm
+        script: |
+          # Read version from .flutter-version file
+          VERSION=$(cat .flutter-version)
+          fvm install $VERSION
 
       - name: Setup fenv-fvm
         script: |
