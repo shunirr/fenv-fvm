@@ -40,8 +40,6 @@ func runCLIMode() {
 		handleInit()
 	case "local":
 		handleLocal(os.Args[2:])
-	case "install":
-		handleInstall(os.Args[2:])
 	case "version":
 		handleVersion()
 	default:
@@ -66,17 +64,21 @@ func runShimMode(binaryName string) {
 		os.Exit(1)
 	}
 
-	// 2. Resolve executable (without running fvm install/use)
-	// The SDK should already be installed via "fenv-fvm local"
-	binaryPath, err := fvm.ResolveBinary(projectRoot, binaryName)
+	// 2. Read version from .flutter-version
+	ver, _, err := version.ReadVersion(projectRoot)
 	if err != nil {
-		// If binary is missing, inform the user to run fenv-fvm local
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		fmt.Fprintf(os.Stderr, "fenv-fvm: run 'fenv-fvm local' to install the Flutter SDK\n")
 		os.Exit(1)
 	}
 
-	// 3. Exec - replace current process with the resolved binary
+	// 3. Resolve executable using version (filesystem-based, no fvm commands)
+	binaryPath, err := fvm.ResolveBinary(ver, binaryName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	// 4. Exec - replace current process with the resolved binary
 	// Prepare arguments (binary name + original args, excluding argv[0])
 	args := append([]string{binaryName}, os.Args[1:]...)
 	env := os.Environ()
@@ -109,112 +111,37 @@ func handleInit() {
 	}
 }
 
-// handleLocal implements "fenv-fvm local [version]"
+// handleLocal implements "fenv-fvm local <version>"
 func handleLocal(args []string) {
-	// Check if fvm is available
-	if err := fvm.CheckFvmAvailable(); err != nil {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "fenv-fvm: local command requires a version argument\n")
+		os.Exit(1)
+	}
+
+	// Case: fenv-fvm local <version>
+	// Write version to current directory and verify SDK exists
+	newVersion := args[0]
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fenv-fvm: failed to get current directory\n")
+		os.Exit(1)
+	}
+
+	// Write version file
+	if err := version.WriteVersion(cwd, newVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	if len(args) > 0 {
-		// Case: fenv-fvm local <version>
-		// Write version to current directory and synchronize
-		newVersion := args[0]
-
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "fenv-fvm: failed to get current directory\n")
-			os.Exit(1)
-		}
-
-		// Write version file
-		if err := version.WriteVersion(cwd, newVersion); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		// Prepare Flutter via fvm
-		if err := fvm.Prepare(newVersion, cwd); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		// Output version
-		fmt.Println(newVersion)
-	} else {
-		// Case: fenv-fvm local (no args)
-		// Find project root and synchronize
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "fenv-fvm: failed to get current directory\n")
-			os.Exit(1)
-		}
-
-		projectRoot, err := version.FindProjectRoot(cwd)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		ver, versionFilePath, err := version.ReadVersion(projectRoot)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		// Prepare Flutter via fvm
-		if err := fvm.Prepare(ver, projectRoot); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		// Output version and path
-		fmt.Printf("%s (set by %s)\n", ver, versionFilePath)
-	}
-}
-
-// handleInstall implements "fenv-fvm install [version]"
-func handleInstall(args []string) {
-	// Check if fvm is available
-	if err := fvm.CheckFvmAvailable(); err != nil {
+	// Verify SDK exists in fvm cache (does not call fvm commands)
+	if err := fvm.VerifySDKExists(newVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	var versionToInstall string
-
-	if len(args) > 0 {
-		// Version specified as argument
-		versionToInstall = args[0]
-	} else {
-		// No argument: read from .flutter-version in current directory
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "fenv-fvm: failed to get current directory\n")
-			os.Exit(1)
-		}
-
-		projectRoot, err := version.FindProjectRoot(cwd)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		ver, _, err := version.ReadVersion(projectRoot)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			os.Exit(1)
-		}
-
-		versionToInstall = ver
-	}
-
-	// Run fvm install only (no fvm use)
-	if err := fvm.Install(versionToInstall); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
+	// Output version
+	fmt.Println(newVersion)
 }
 
 // handleVersion implements "fenv-fvm version"
@@ -244,36 +171,7 @@ func handleVersion() {
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: fenv-fvm <command> [args]\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  init                Setup shims and PATH\n")
-	fmt.Fprintf(os.Stderr, "  local [version]     Set or sync Flutter version\n")
-	fmt.Fprintf(os.Stderr, "  install [version]   Pre-download Flutter version\n")
-	fmt.Fprintf(os.Stderr, "  version             Show current Flutter version\n")
-}
-
-// determineProgramMode returns the execution mode based on program name
-func determineProgramMode(programName string) string {
-	switch programName {
-	case "fenv-fvm":
-		return "cli"
-	case "flutter", "dart":
-		return "shim"
-	default:
-		return "unknown"
-	}
-}
-
-// parseCommand parses the command from CLI arguments
-func parseCommand(args []string) string {
-	if len(args) < 2 {
-		return ""
-	}
-	return args[1]
-}
-
-// validateInstallArgs validates arguments for install command
-func validateInstallArgs(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("install requires a version argument")
-	}
-	return nil
+	fmt.Fprintf(os.Stderr, "  init             Setup shims and PATH\n")
+	fmt.Fprintf(os.Stderr, "  local <version>  Set Flutter version for project\n")
+	fmt.Fprintf(os.Stderr, "  version          Show current Flutter version\n")
 }
