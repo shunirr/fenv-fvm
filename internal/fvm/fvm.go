@@ -3,127 +3,67 @@ package fvm
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 )
 
-// CheckFvmAvailable checks if fvm is available in PATH
-func CheckFvmAvailable() error {
-	_, err := exec.LookPath("fvm")
-	if err != nil {
-		return fmt.Errorf("fenv-fvm: fvm not found in PATH")
-	}
-	return nil
-}
-
-// getEnvWithoutShims returns environment variables with shims removed from PATH
-// to prevent infinite loops when fvm calls flutter/dart
-func getEnvWithoutShims() []string {
-	currentPath := os.Getenv("PATH")
-	if currentPath == "" {
-		return os.Environ()
+// GetCacheDir returns the fvm cache directory in priority order:
+// 1. $FVM_CACHE_PATH environment variable
+// 2. $HOME/fvm/versions
+// 3. $HOME/Library/Application Support/fvm/versions
+func GetCacheDir() (string, error) {
+	// Check FVM_CACHE_PATH environment variable
+	if cachePath := os.Getenv("FVM_CACHE_PATH"); cachePath != "" {
+		if info, err := os.Stat(cachePath); err == nil && info.IsDir() {
+			return cachePath, nil
+		}
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return os.Environ() // If we can't get home, return original environment
+		return "", fmt.Errorf("fenv-fvm: failed to get home directory")
 	}
 
-	// Get fenv-fvm shim root (default: ~/.fenv-fvm)
-	fenvFvmShimRoot := os.Getenv("FENV_FVM_ROOT")
-	if fenvFvmShimRoot == "" {
-		fenvFvmShimRoot = filepath.Join(home, ".fenv-fvm")
-	}
-	fenvFvmShimsDir := filepath.Join(fenvFvmShimRoot, "shims")
-
-	// Also filter out ~/.fenv/shims to prevent conflicts with original fenv tool
-	fenvShimsDir := filepath.Join(home, ".fenv", "shims")
-
-	// Split PATH and filter out both shim directories
-	pathDirs := strings.Split(currentPath, string(os.PathListSeparator))
-	var filteredDirs []string
-	for _, dir := range pathDirs {
-		// Skip both shim directories
-		if dir != fenvFvmShimsDir && dir != fenvShimsDir {
-			filteredDirs = append(filteredDirs, dir)
-		}
+	// Try $HOME/fvm/versions (common default)
+	commonPath := filepath.Join(home, "fvm", "versions")
+	if info, err := os.Stat(commonPath); err == nil && info.IsDir() {
+		return commonPath, nil
 	}
 
-	newPath := strings.Join(filteredDirs, string(os.PathListSeparator))
-
-	// Build new environment with modified PATH
-	var newEnv []string
-	for _, env := range os.Environ() {
-		// Skip existing PATH variable
-		if !strings.HasPrefix(env, "PATH=") {
-			newEnv = append(newEnv, env)
-		}
+	// Try $HOME/Library/Application Support/fvm/versions (official default for macOS)
+	officialPath := filepath.Join(home, "Library", "Application Support", "fvm", "versions")
+	if info, err := os.Stat(officialPath); err == nil && info.IsDir() {
+		return officialPath, nil
 	}
-	// Add new PATH
-	newEnv = append(newEnv, "PATH="+newPath)
 
-	return newEnv
+	return "", fmt.Errorf("fenv-fvm: fvm cache directory not found")
 }
 
-// Install runs fvm install <version>
-func Install(version string) error {
-	env := getEnvWithoutShims()
-
-	cmd := exec.Command("fvm", "install", version)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	// Remove shims from PATH to prevent infinite loop
-	// when fvm tries to execute flutter/dart commands
-	cmd.Env = env
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("fenv-fvm: failed to install Flutter '%s' via fvm", version)
+// GetSDKPath returns the path to the Flutter SDK for the given version
+func GetSDKPath(version string) (string, error) {
+	cacheDir, err := GetCacheDir()
+	if err != nil {
+		return "", err
 	}
 
-	return nil
-}
+	sdkPath := filepath.Join(cacheDir, version)
 
-// Use runs fvm use <version> in the project root directory
-func Use(version, projectRoot string) error {
-	env := getEnvWithoutShims()
-
-	cmd := exec.Command("fvm", "use", version, "--force")
-	cmd.Dir = projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	// Remove shims from PATH to prevent infinite loop
-	// when fvm tries to execute flutter/dart commands
-	cmd.Env = env
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("fenv-fvm: failed to prepare Flutter '%s' via fvm", version)
+	// Check if SDK directory exists
+	if info, err := os.Stat(sdkPath); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("fenv-fvm: Flutter SDK '%s' is not installed\nPlease run: fvm install %s", version, version)
 	}
 
-	return nil
-}
-
-// Prepare runs both Install and Use for the given version
-func Prepare(version, projectRoot string) error {
-	if err := Install(version); err != nil {
-		return err
-	}
-
-	if err := Use(version, projectRoot); err != nil {
-		return err
-	}
-
-	return nil
+	return sdkPath, nil
 }
 
 // ResolveBinary resolves the path to flutter or dart binary
 // binaryName should be "flutter" or "dart"
-func ResolveBinary(projectRoot, binaryName string) (string, error) {
-	binaryPath := filepath.Join(projectRoot, ".fvm", "flutter_sdk", "bin", binaryName)
+func ResolveBinary(version, binaryName string) (string, error) {
+	sdkPath, err := GetSDKPath(version)
+	if err != nil {
+		return "", err
+	}
+
+	binaryPath := filepath.Join(sdkPath, "bin", binaryName)
 
 	// Check if binary exists
 	if _, err := os.Stat(binaryPath); err != nil {
@@ -140,4 +80,10 @@ func ResolveBinary(projectRoot, binaryName string) (string, error) {
 	}
 
 	return absPath, nil
+}
+
+// VerifySDKExists checks if the SDK for the given version exists
+func VerifySDKExists(version string) error {
+	_, err := GetSDKPath(version)
+	return err
 }

@@ -1,6 +1,6 @@
-# fenv-fvm Specification v1
+# fenv-fvm Specification v2
 
-This document defines all requirements necessary for the initial implementation of **fenv-fvm**. Implementers must write the program in **Go** and must not add behavior outside this specification.
+This document defines all requirements necessary for the implementation of **fenv-fvm**. Implementers must write the program in **Go** and must not add behavior outside this specification.
 
 ## 1. Overview
 
@@ -10,18 +10,17 @@ fenv-fvm is a single-binary CLI designed to reproduce the same workflow as **fen
 
 - Manage Flutter SDK versions through `.flutter-version` files.
 - Allow commands such as `flutter build ...`, `flutter pub get`, or `dart ...` to be executed without prefixes.
-- Delegate Flutter SDK installation and management to **fvm**.
-- Operate without dependencies on Dart or Flutter runtimes.
-- Allow CI systems like Codemagic (where `fvm` is pre-installed) to build repositories that use `fenv` locally.
+- Reference Flutter SDKs directly from **fvm's cache directory** without calling fvm commands.
+- Operate without dependencies on Dart, Flutter runtimes, or fvm commands.
+- Allow CI systems like Codemagic (where Flutter SDKs are pre-installed via `fvm`) to build repositories that use `fenv` locally.
 
 ### 1.2 Typical CI Workflow
 
 1. The repository includes a `.flutter-version` file.
-2. The CI environment already has `fvm` installed.
+2. The CI environment already has Flutter SDKs installed via `fvm install`.
 3. The CI step downloads or includes the `fenv-fvm` binary.
 4. Run `eval "$(fenv-fvm init)"` to initialize the PATH.
-5. Run `fenv-fvm local` to synchronize `.flutter-version` with fvm.
-6. Execute `flutter build ...` or `flutter pub get` as usual.
+5. Execute `flutter build ...` or `flutter pub get` as usual (shims automatically resolve SDK).
 
 ## 2. Distribution and Build
 
@@ -47,9 +46,9 @@ Windows is out of scope for the initial release.
 
 ### 2.4 Dependencies
 
-- `fvm` must be available on PATH at runtime.
-- `fvm install` must have network access.
-- Flutter and Dart SDKs are not required beforehand.
+- Flutter SDKs must be pre-installed in fvm's cache directory (typically via `fvm install`).
+- No runtime dependencies on `fvm`, Dart, or Flutter executables.
+- fenv-fvm only reads from fvm's cache directory structure.
 
 ## 3. Core Model
 
@@ -60,30 +59,35 @@ Windows is out of scope for the initial release.
 
 ### 3.2 Project Root Definition
 
-- The “project root” is defined as the nearest ancestor directory (including the current one) that contains a `.flutter-version` file.
-- All fvm commands (`use`, `.fvm` directory creation, SDK binary resolution) are based on this directory.
+- The "project root" is defined as the nearest ancestor directory (including the current one) that contains a `.flutter-version` file.
+- All SDK binary resolution is based on this directory.
 
 ### 3.3 Requested Version
 
 - The first line of `.flutter-version` defines the requested Flutter version.
-- This string is passed directly to `fvm install <version>` and `fvm use <version>`.
+- This string is used to locate the SDK in fvm's cache directory.
 
   - Examples: `3.13.9`, `stable`.
 
-### 3.4 fvm Synchronization
+### 3.4 FVM Cache Directory Resolution
 
-For the requested version, fenv-fvm performs:
+fenv-fvm locates fvm's cache directory in the following priority order:
 
-1. `fvm install <version>` to download the SDK if not cached.
-2. Execute `fvm use <version>` in the project root.
+1. `$FVM_CACHE_PATH` environment variable (if set)
+2. `$HOME/fvm/versions` (common default)
+3. `$HOME/Library/Application Support/fvm/versions` (official default for macOS)
 
-   - This creates `<project>/.fvm/flutter_sdk` pointing to the active SDK.
+The cache directory contains subdirectories named by version (e.g., `3.13.9/`), each containing a complete Flutter SDK.
 
 ### 3.5 Binary Resolution
 
-- Flutter binary: `<project>/.fvm/flutter_sdk/bin/flutter`
-- Dart binary: `<project>/.fvm/flutter_sdk/bin/dart`
-- fenv-fvm never parses fvm output or internal JSON; it only trusts `.fvm/flutter_sdk`.
+For a requested version from `.flutter-version`:
+
+- Locate SDK directory: `<cache>/<version>/`
+- Flutter binary: `<cache>/<version>/bin/flutter`
+- Dart binary: `<cache>/<version>/bin/dart`
+
+If the SDK directory or binaries do not exist, fenv-fvm reports an error instructing the user to run `fvm install <version>`.
 
 ## 4. Execution Modes
 
@@ -118,20 +122,21 @@ When executed as `flutter` or `dart`, fenv-fvm performs:
 
    - Read `.flutter-version`. If unreadable, exit with error.
 
-3. **Check fvm Availability**
+3. **Resolve FVM Cache Directory**
 
-   - If `fvm` not found in PATH, exit with error.
+   - Check `$FVM_CACHE_PATH`, then `$HOME/fvm/versions`, then `$HOME/Library/Application Support/fvm/versions`.
+   - Use the first existing directory.
 
-4. **Synchronize**
+4. **Resolve SDK Path**
 
-   - Run `fvm install <version>` and `fvm use <version>` in the project root.
-   - On failure, exit with error.
+   - Construct SDK path: `<cache>/<version>/`
+   - If SDK directory does not exist, exit with error instructing user to run `fvm install <version>`.
 
 5. **Resolve Executable**
 
-   - If `argv[0] == flutter`, use `<project>/.fvm/flutter_sdk/bin/flutter`.
-   - If `argv[0] == dart`, use `<project>/.fvm/flutter_sdk/bin/dart`.
-   - If missing, exit with error.
+   - If `argv[0] == flutter`, use `<cache>/<version>/bin/flutter`.
+   - If `argv[0] == dart`, use `<cache>/<version>/bin/dart`.
+   - If binary does not exist, exit with error.
 
 6. **Exec**
 
@@ -139,12 +144,12 @@ When executed as `flutter` or `dart`, fenv-fvm performs:
    - Pass through all arguments and environment variables.
    - The resulting exit code is the underlying Flutter/Dart process code.
 
-**Idempotency:** If the same version is already installed and active, fvm commands should complete quickly without redundant work.
+**No fvm commands are executed** in shim mode. SDK resolution is purely filesystem-based.
 
 ## 6. CLI Mode Specification
 
-Only the following subcommands are implemented: `init`, `local`, `install`, `version`.
-No `global`, `which`, `list`, `list-remote`, `doctor`, or `workspace`.
+Only the following subcommands are implemented: `init`, `local`, `version`.
+No `global`, `which`, `list`, `list-remote`, `doctor`, `install`, or `workspace`.
 
 ### 6.1 `fenv-fvm init`
 
@@ -161,105 +166,92 @@ No `global`, `which`, `list`, `list-remote`, `doctor`, or `workspace`.
 
 - On failure, print `fenv-fvm: failed to initialize shims directory` to stderr and exit non-zero.
 
-### 6.2 `fenv-fvm local`
+### 6.2 `fenv-fvm local <version>`
 
-#### `fenv-fvm local <version>`
-
-**Purpose:** Declare the Flutter SDK version for the current project and synchronize immediately.
+**Purpose:** Declare the Flutter SDK version for the current project.
 
 **Steps:**
 
 1. Treat current directory as project root (no ancestor search).
 2. Write `<version>` to `.flutter-version`.
-3. Execute:
-
-   - `fvm install <version>`
-   - `fvm use <version>`
-
+3. Verify SDK exists in fvm cache:
+   - Resolve fvm cache directory
+   - Check if `<cache>/<version>/` exists
+   - If not, output instruction to run `fvm install <version>`
 4. On success: output `<version>` and exit code 0.
 
 **Errors:**
 
-- `fvm` not found → `fenv-fvm: fvm not found in PATH`
-- install/use fails → `fenv-fvm: failed to prepare Flutter '<version>' via fvm`
+- SDK not found → `fenv-fvm: Flutter SDK '<version>' is not installed\nPlease run: fvm install <version>`
 
-#### `fenv-fvm local` (no args)
+### 6.3 `fenv-fvm version`
 
-**Purpose:** Synchronize with existing `.flutter-version` (mainly for CI).
+**Purpose:** Display the Flutter version resolved from `.flutter-version`.
 
 **Steps:**
 
-1. Search for `.flutter-version` upward.
+1. Search for `.flutter-version` upward from current directory.
 2. If not found → error.
 3. Read the version.
-4. Execute `fvm install` and `fvm use` in project root.
-5. Output `<version> (set by <path>)`.
+4. Output `<version> (set by <path>)`.
 
 **Errors:**
 
 - Missing `.flutter-version` → `fenv-fvm: no Flutter version configured (.flutter-version not found)`
 - Unreadable `.flutter-version` → `fenv-fvm: failed to read .flutter-version`
-- `fvm` missing → same as above
-- fvm failure → `fenv-fvm: failed to prepare Flutter '<version>' via fvm`
-
-### 6.3 `fenv-fvm install <version>`
-
-**Purpose:** Pre-download the specified Flutter version using fvm only.
-Does **not** modify `.flutter-version` or run `fvm use`.
-
-**Errors:**
-
-- `fvm` missing → error.
-- fvm failure → `fenv-fvm: failed to install Flutter '<version>' via fvm`
-
-### 6.4 `fenv-fvm version`
-
-**Purpose:** Display the Flutter version resolved from `.flutter-version`.
-
-**Output:**
-`<version> (set by <path>)`
 
 ## 7. Error Messages and Exit Codes
 
 **Standardized messages:**
 
-1. `fenv-fvm: fvm not found in PATH`
-2. `fenv-fvm: no Flutter version configured (.flutter-version not found)`
-3. `fenv-fvm: failed to read .flutter-version`
-4. `fenv-fvm: failed to prepare Flutter '<version>' via fvm`
-5. `fenv-fvm: failed to install Flutter '<version>' via fvm`
-6. `fenv-fvm: resolved Flutter SDK is incomplete (missing bin/flutter)`
+1. `fenv-fvm: no Flutter version configured (.flutter-version not found)`
+2. `fenv-fvm: failed to read .flutter-version`
+3. `fenv-fvm: Flutter SDK '<version>' is not installed` (followed by instruction: `Please run: fvm install <version>`)
+4. `fenv-fvm: fvm cache directory not found`
+5. `fenv-fvm: resolved Flutter SDK is incomplete (missing bin/flutter or bin/dart)`
+6. `fenv-fvm: failed to initialize shims directory`
+7. `fenv-fvm: failed to exec resolved Flutter SDK binary`
 
 Exit code is non-zero on any failure.
 
 ## 8. Implementation Requirements (Go)
 
-### 8.1 Process Execution
+### 8.1 FVM Cache Discovery
 
-- Use Go’s `os/exec` to run `fvm install` and `fvm use`.
-- Set working directory to project root for `fvm use`.
-- Pass through stdout/stderr. On failure, print the defined error messages.
+- Check environment variable `$FVM_CACHE_PATH`.
+- If not set, try `$HOME/fvm/versions`.
+- If not found, try `$HOME/Library/Application Support/fvm/versions`.
+- Use the first directory that exists.
+- If none exist, return error: `fenv-fvm: fvm cache directory not found`.
 
-### 8.2 Exec Replacement
+### 8.2 SDK Path Resolution
+
+- Given version string from `.flutter-version`, construct: `<cache>/<version>/`.
+- Check if directory exists.
+- Verify `<cache>/<version>/bin/flutter` and `<cache>/<version>/bin/dart` exist.
+- If directory missing, return: `fenv-fvm: Flutter SDK '<version>' is not installed`.
+- If binaries missing, return: `fenv-fvm: resolved Flutter SDK is incomplete (missing bin/flutter or bin/dart)`.
+
+### 8.3 Exec Replacement
 
 - Use `syscall.Exec` (or equivalent) to replace the current process with the Flutter/Dart binary.
 - On failure: `fenv-fvm: failed to exec resolved Flutter SDK binary`.
 
-### 8.3 Path Handling
+### 8.4 Path Handling
 
 - Resolve all paths to absolute canonical paths.
 - Verify binary existence before `exec`.
-- If missing, return the standard “incomplete SDK” error.
 
-### 8.4 Idempotency
+### 8.5 No External Command Execution
 
-- Repeated calls to `local` or shim execution must be safe and not cause redundant downloads.
-- Re-running `fvm use` for the same version is acceptable.
+- **fenv-fvm must not execute any fvm commands**.
+- All operations are filesystem-based: reading `.flutter-version`, checking directory existence, and executing SDK binaries.
 
-### 8.5 Global State
+### 8.6 Global State
 
 - No global version files (e.g., `~/.fenv-fvm/version`).
 - Only `.flutter-version` defines the active version.
+- No `.fvm/` directory is created or managed by fenv-fvm.
 
 ## 9. Security and Distribution
 
@@ -271,8 +263,9 @@ Exit code is non-zero on any failure.
 
 ### 9.2 Trust Model
 
-- fenv-fvm trusts fvm. SDK authenticity verification is out of scope.
-- Network or certificate errors during fvm operations are not handled by fenv-fvm.
+- fenv-fvm trusts that SDKs in fvm's cache directory are valid.
+- SDK authenticity verification is out of scope.
+- fenv-fvm does not download or modify SDKs; it only references pre-installed ones.
 
 ## 10. Finalized Specification
 
@@ -280,12 +273,12 @@ Exit code is non-zero on any failure.
 - `.flutter-version` is the only version source.
 - No global fallback.
 - Shim structure: single binary + symlinks. Behavior switches via `argv[0]`.
-- Shim mode: resolves version, runs `fvm install/use`, and execs SDK binaries.
-- CLI subcommands: `init`, `local`, `install`, `version`.
-- `local <version>` writes `.flutter-version` and synchronizes.
-- `local` (no args) synchronizes from existing file.
-- `install <version>` pre-downloads only.
+- Shim mode: resolves version from `.flutter-version`, locates SDK in fvm cache, and execs SDK binaries directly.
+- CLI subcommands: `init`, `local <version>`, `version`.
+- `local <version>` writes `.flutter-version` and verifies SDK exists (does not call fvm).
 - `version` prints `<version> (set by <path>)`.
+- **No fvm commands are executed** by fenv-fvm.
+- All SDK resolution is filesystem-based using fvm's cache directory structure.
 - Errors and exit codes follow standardized messages.
 - Windows is out of scope.
 
