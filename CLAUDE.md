@@ -15,20 +15,23 @@ This ensures consistency and accessibility for the global development community.
 
 ## Project Overview
 
-fenv-fvm is a single-binary CLI tool written in Go that provides FENV-compatible functionality for Flutter version management using FVM as the backend. The project enables CI environments (like Codemagic) to build repositories that use fenv locally without requiring Dart/Flutter runtimes.
+fenv-fvm is a single-binary CLI tool written in Go that provides FENV-compatible functionality for Flutter version management by directly referencing Flutter SDKs from FVM's cache directory. The project enables CI environments (like Codemagic) to build repositories that use fenv locally without requiring Dart/Flutter runtimes or fvm command execution.
 
 ## Key Architecture
 
 The tool operates in two execution modes determined by `argv[0]`:
-- **CLI mode**: When executed as `fenv-fvm` - provides subcommands (`init`, `local`, `install`, `version`)
+- **CLI mode**: When executed as `fenv-fvm` - provides subcommands (`init`, `local`, `version`)
 - **Shim mode**: When executed as `flutter` or `dart` - acts as a transparent proxy to the appropriate SDK binaries
 
 ### Core Components
 
 1. **Version Resolution**: Reads `.flutter-version` files to determine the requested Flutter SDK version
 2. **Project Root Discovery**: Searches upward from current directory to find `.flutter-version` file
-3. **FVM Integration**: Delegates SDK management to `fvm install` and `fvm use` commands
-4. **Binary Resolution**: Resolves SDK binaries via `<project>/.fvm/flutter_sdk/bin/{flutter,dart}`
+3. **FVM Cache Discovery**: Locates FVM's cache directory in priority order:
+   - `$FVM_CACHE_PATH` environment variable
+   - `$HOME/fvm/versions`
+   - `$HOME/Library/Application Support/fvm/versions`
+4. **Binary Resolution**: Resolves SDK binaries via `<cache>/<version>/bin/{flutter,dart}`
 5. **Shim System**: Creates symlinks/copies in `$FENV_FVM_ROOT/shims/` for transparent binary execution
 
 ## Project Structure
@@ -94,25 +97,28 @@ GOOS=darwin GOARCH=arm64 go build -o fenv-fvm-darwin-arm64 ./cmd/fenv-fvm
 - **Language**: Must be implemented in Go (per specification)
 - **Dependencies**: Single binary with no external runtime dependencies
 - **Distribution**: Statically linked binary for Linux x86_64/aarch64 and macOS x86_64/arm64
-- **Runtime Requirements**: `fvm` must be available in PATH
+- **Runtime Requirements**: Flutter SDKs must be pre-installed in FVM's cache directory
 
 ## Critical Behaviors
 
 - **No Global Fallback**: `.flutter-version` file is mandatory - no global version support
+- **No Command Execution**: All operations are filesystem-based - no fvm commands are executed
 - **Process Replacement**: Uses `syscall.Exec` to replace current process with SDK binaries in shim mode
-- **Idempotency**: Multiple executions with same version should be safe and fast
+- **Filesystem-only Operations**: SDK resolution is purely based on directory and file existence checks
 - **Error Handling**: Standardized error messages as defined in SPEC.md section 7
 
 ## Key Files
 
 - `cmd/fenv-fvm/main.go`: Main application entry point
-- `internal/`: Internal packages for future code organization
+- `internal/fvm/fvm.go`: FVM cache directory discovery and SDK path resolution
+- `internal/version/version.go`: Version file reading and project root discovery
+- `internal/shim/shim.go`: Shim initialization and PATH setup
 - `SPEC.md`: Complete technical specification (primary reference for implementation)
-- `README.md`: Basic project description
+- `README.md`: User-facing documentation
 - `.flutter-version`: Project-level Flutter version specification (created by users)
 
 ## Security Considerations
 
-- Trusts fvm for SDK authenticity verification
+- Trusts that SDKs in FVM's cache directory are valid
 - No checksum verification performed by fenv-fvm itself
-- Network and certificate errors during fvm operations are not handled
+- Does not download or modify SDKs - only references pre-installed ones
